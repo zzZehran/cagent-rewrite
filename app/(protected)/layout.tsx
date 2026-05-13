@@ -1,8 +1,8 @@
 "use client";
 
 import { api } from "@/convex/_generated/api";
-import {  UserButton, useUser } from "@clerk/nextjs";
-import { Authenticated, useQuery } from "convex/react";
+import { UserButton, useUser } from "@clerk/nextjs";
+import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import {
   LayoutDashboard,
   Users,
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function ProtectedLayout({
   children,
@@ -101,6 +101,9 @@ export default function ProtectedLayout({
         )}
         <main className="flex-1 overflow-y-auto">{children}</main>
       </Authenticated>
+      <Unauthenticated>
+        <h1>Who are you?</h1>
+      </Unauthenticated>
     </div>
   );
 }

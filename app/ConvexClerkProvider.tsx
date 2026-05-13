@@ -16,7 +16,7 @@ export default function ConvexClientProvider({ children }: { children: ReactNode
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
       {children}
-      <ToastContainer/>
+      <ToastContainer position='top-center'/>
     </ConvexProviderWithClerk>
   )
 }

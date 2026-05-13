@@ -9,6 +9,7 @@ export const getBusinessByOwnerId = query({
       .query("business")
       .withIndex("by_ownerId", (q) => q.eq("ownerId", args.ownerId))
       .first();
+    return business;
   },
 });
 
@@ -71,6 +72,27 @@ export const registerBusiness = mutation({
       }
     }
 
-    return businessId
+    return businessId;
+  },
+});
+
+export const getBusinessDashbaordStats = query({
+  args: {
+    businessId: v.id("business"),
+  },
+  handler: async (ctx, args) => {
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const groups = await ctx.db
+      .query("groups")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    return {
+      customerCount: customers.length,
+      groupCount: groups.length,
+    };
   },
 });
