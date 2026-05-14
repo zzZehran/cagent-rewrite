@@ -1,5 +1,6 @@
+import { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 export const createCustomer = mutation({
   args: {
@@ -22,5 +23,59 @@ export const createCustomer = mutation({
       }
     }
     return customerId;
+  },
+});
+
+export const bulkCreateCustomers = mutation({
+  args: {
+    businessId: v.id("business"),
+    customers: v.array(
+      v.object({
+        name: v.string(),
+        phone: v.string(),
+        email: v.optional(v.string()),
+        groupNames: v.array(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const existingGroups = await ctx.db
+      .query("groups")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const groupMap: Record<string, Id<"groups">> = {};
+    for (const group of existingGroups) {
+      groupMap[group.name] = group._id;
+    }
+
+    for (const customer of args.customers) {
+      const customerId = await ctx.db.insert("customers", {
+        businessId: args.businessId,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+      });
+
+      for (const groupName of customer.groupNames) {
+        const name = groupName.trim();
+        if (!name) continue;
+
+        if (!groupMap[name]) {
+          const newGroupId = await ctx.db.insert("groups", {
+            businessId: args.businessId,
+            name,
+          });
+          groupMap[name] = newGroupId;
+        }
+
+        await ctx.db.insert("customerGroups", {
+          customerId,
+          groupId: groupMap[name],
+        });
+      }
+    }
+
+    return { success: true, customersProcessed: args.customers.length };
   },
 });
