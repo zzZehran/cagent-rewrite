@@ -31,7 +31,7 @@ export default function SignInPage() {
       {/* Right - Content */}
       <div className="flex flex-col justify-center items-center px-8 text-center">
         <div className="max-w-md">
-          <h1 className="text-4xl font-bold mb-4">Welcome CAgent</h1>
+          <h1 className="text-4xl font-bold mb-4">Welcome to AIGENT</h1>
 
           <p className="text-gray-500 mb-8">
             Sign in to continue or create a new account.

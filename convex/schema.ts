@@ -13,7 +13,7 @@ export default defineSchema({
     name: v.string(),
     email: v.optional(v.string()),
     phone: v.string(),
-    lastContactedAt: v.optional(v.string()),
+    lastContactedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
     .searchIndex("search_name", {

@@ -1,0 +1,1 @@
+export const CUSTOMERS_TO_FETCH = 14;

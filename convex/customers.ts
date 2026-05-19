@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
@@ -77,5 +78,22 @@ export const bulkCreateCustomers = mutation({
     }
 
     return { success: true, customersProcessed: args.customers.length };
+  },
+});
+
+export const getPaginatedCustomersByBusiness = query({
+  args: {
+    businessId: v.id("business"),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .paginate(args.paginationOpts);
+
+    if (!customers) throw new ConvexError("Failed to fetch users.");
+
+    return customers;
   },
 });

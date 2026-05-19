@@ -1,7 +1,12 @@
 "use client";
 import { api } from "@/convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
-import { ReactMutation, useMutation, useQuery } from "convex/react";
+import {
+  ReactMutation,
+  useMutation,
+  usePaginatedQuery,
+  useQuery,
+} from "convex/react";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,6 +49,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { downloadTemplate } from "@/lib/utils";
+import { CUSTOMERS_TO_FETCH } from "@/constants";
 
 type Group = {
   _id: Id<"groups">;
@@ -59,10 +65,25 @@ type ParsedRow = {
   groupNames: string[];
 };
 
+function lastContactedOn(timestamp: number) {
+  console.log(timestamp);
+  const diff = Date.now() - timestamp;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days <= 1) return "Today";
+  if (days < 7) return "Last week";
+  if (days < 30) return "Last month";
+  if (days <= 365) return "Last year";
+  if (days > 365) return "Over a year ago";
+  // return date.toLocaleDateString();
+}
+
 const customerFormSchema = z.object({
-  name: z.string().min(1, "Name is required."),
-  email: z.string().optional(),
-  phone: z.string().min(1, "Phone is required."),
+  name: z.string().min(1, "Name is required.").max(50, "Use a valid name."),
+  email: z.email().optional(),
+  phone: z
+    .string()
+    .min(1, "Phone is required.")
+    .max(15, "Use valid phone number"),
   groupIds: z.array(z.custom<Id<"groups">>()).optional(),
 });
 type CustomerFormData = z.infer<typeof customerFormSchema>;
@@ -83,9 +104,10 @@ export function CustomerModal({
     control,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<CustomerFormData>({
     resolver: zodResolver(customerFormSchema),
+    mode: "onChange",
     defaultValues: {
       name: "",
       email: "",
@@ -110,7 +132,13 @@ export function CustomerModal({
   }
 
   return (
-    <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+    <Dialog
+      open={modalOpen}
+      onOpenChange={() => {
+        reset();
+        setModalOpen(!modalOpen);
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -119,49 +147,116 @@ export function CustomerModal({
           + Add Customer
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <DialogHeader>
-            <DialogTitle>Add Customer</DialogTitle>
-          </DialogHeader>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="fullName">Full Name</FieldLabel>
-              <Input
-                {...register("name")}
-                id="fullName"
-                placeholder="John Doe"
-                required
-              />
-            </Field>
-          </FieldGroup>
 
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                {...register("email")}
-                id="email"
-                placeholder="example@email.com"
-              />
-            </Field>
-          </FieldGroup>
+      <DialogContent
+        className="
+      w-full max-w-md
+      rounded-3xl
+      border-0
+      bg-white
+      p-7
+      shadow-2xl
+      sm:max-w-md
+    "
+      >
+        <DialogHeader className="mb-6 flex flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-lg font-bold text-gray-900">
+            Add Customer
+          </DialogTitle>
+        </DialogHeader>
 
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="phone">Phone</FieldLabel>
-              <Input
-                {...register("phone")}
-                id="phone"
-                placeholder="+91-1234567890"
-                required
-              />
-            </Field>
-          </FieldGroup>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Name */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Name <span className="text-red-400">*</span>
+            </label>
 
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="phone">Groups</FieldLabel>
+            <Input
+              {...register("name")}
+              placeholder="Full name"
+              autoFocus
+              className={`
+            h-auto rounded-xl border px-4 py-2.5 text-sm
+            text-gray-800 placeholder:text-gray-400
+            focus-visible:ring-2
+            ${
+              errors.name
+                ? "border-red-400 focus-visible:ring-red-400"
+                : "border-gray-200 focus-visible:ring-indigo-400"
+            }
+          `}
+            />
+
+            {errors.name && (
+              <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>
+            )}
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Email <span className="text-red-400">*</span>
+            </label>
+
+            <Input
+              {...register("email")}
+              type="email"
+              placeholder="email@example.com"
+              className={`
+            h-auto rounded-xl border px-4 py-2.5 text-sm
+            text-gray-800 placeholder:text-gray-400
+            focus-visible:ring-2
+            ${
+              errors.email
+                ? "border-red-400 focus-visible:ring-red-400"
+                : "border-gray-200 focus-visible:ring-indigo-400"
+            }
+          `}
+            />
+
+            {errors.email && (
+              <p className="mt-1 text-xs text-red-500">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Phone <span className="text-red-400">*</span>
+            </label>
+
+            <Input
+              {...register("phone")}
+              type="tel"
+              placeholder="+91 1234567890"
+              className={`
+            h-auto rounded-xl border px-4 py-2.5 text-sm
+            text-gray-800 placeholder:text-gray-400
+            focus-visible:ring-2
+            ${
+              errors.phone
+                ? "border-red-400 focus-visible:ring-red-400"
+                : "border-gray-200 focus-visible:ring-indigo-400"
+            }
+          `}
+            />
+
+            {errors.phone && (
+              <p className="mt-1 text-xs text-red-500">
+                {errors.phone.message}
+              </p>
+            )}
+          </div>
+
+          {/* Groups */}
+          {groups.length > 0 && (
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Groups
+              </label>
 
               <Controller
                 name="groupIds"
@@ -169,40 +264,65 @@ export function CustomerModal({
                 render={({ field }) => (
                   <ToggleGroup
                     type="multiple"
-                    spacing={2}
-                    className="flex flex-wrap"
                     value={field.value}
                     onValueChange={field.onChange}
+                    className="flex flex-wrap justify-start gap-2"
                   >
-                    {groups.map((el, idx) => (
+                    {groups.map((g) => (
                       <ToggleGroupItem
-                        key={idx}
-                        value={el._id}
-                        aria-label="Light"
-                        className="flex flex-col items-center justify-center rounded-xl
-                      border border-gray-200 px-2 py-1 text-xs transition-colors
-                      hover:bg-gray-100
+                        key={g._id}
+                        value={g._id}
+                        className="
+                      rounded-full border border-gray-200
+                      bg-white px-3 py-1
+                      text-xs font-medium text-gray-600
+                      transition
+                      hover:border-indigo-300
+                      hover:bg-white
+                      data-[state=on]:border-indigo-600
                       data-[state=on]:bg-indigo-600
                       data-[state=on]:text-white
-                      data-[state=on]:border-indigo-600 hover:cursor-pointer"
+                    "
                       >
-                        {el.name}
+                        {g.name}
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
                 )}
               />
-            </Field>
-          </FieldGroup>
+            </div>
+          )}
 
-          <DialogFooter>
+          {/* Footer */}
+          <div className="flex gap-3 pt-2">
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="
+              flex-1 rounded-xl border-gray-200
+              py-5 text-sm font-semibold text-gray-600
+              hover:bg-gray-50
+            "
+              >
+                Cancel
+              </Button>
             </DialogClose>
-            <Button onClick={() => console.log("pressed")} type="submit">
-              Add customer
+
+            <Button
+              type="submit"
+              disabled={!isValid}
+              className="
+            flex-1 rounded-xl
+            bg-indigo-600 py-5
+            text-sm font-semibold text-white
+            hover:bg-indigo-700
+            disabled:opacity-40
+          "
+            >
+              Add Customer
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -330,12 +450,13 @@ function ImportModal({
           <h2 className="text-lg font-bold text-gray-900">
             Import from Excel / CSV
           </h2>
-          <button
+          <Button
+            variant={"outline"}
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition"
           >
             <X size={20} />
-          </button>
+          </Button>
         </div>
 
         {/* Drop zone */}
@@ -476,6 +597,7 @@ export default function CustomersPage() {
   const router = useRouter();
 
   const [showExcelImport, setShowExcelImport] = useState(false);
+  const [search, setSearch] = useState("");
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -485,6 +607,17 @@ export default function CustomersPage() {
     api.groups.listByBusiness,
     business ? { businessId: business._id } : "skip",
   );
+
+  const { results, status, loadMore, isLoading } = usePaginatedQuery(
+    api.customers.getPaginatedCustomersByBusiness,
+    business ? { businessId: business._id } : "skip",
+    { initialNumItems: CUSTOMERS_TO_FETCH },
+  );
+
+  const isLoadingFirst = status === "LoadingFirstPage";
+  const canLoadMore = status === "CanLoadMore";
+  const isLoadingMore = status === "LoadingMore";
+
   const createCustomer = useMutation(api.customers.createCustomer);
   const bulkCreateCustomers = useMutation(api.customers.bulkCreateCustomers);
 
@@ -523,7 +656,168 @@ export default function CustomersPage() {
           </Button>
         </div>
       </div>
+      <div className="max-w-5xl mx-auto px-2 py-8">
+        {/* Search */}
+        <div className="relative mb-6">
+          <Search
+            size={16}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search loaded customers by name, email or phone…"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-800 placeholder-gray-400 text-sm shadow-sm"
+          />
+        </div>
 
+        {/* Content */}
+        <div className="grid grid-cols-2 gap-x-5 gap-y-5">
+          {isLoadingFirst && (
+            <div className="col-span-2 flex justify-center py-20">
+              <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            </div>
+          )}
+
+          {results ? (
+            <>
+              {results.map((customer, idx) => (
+                <div
+                  key={customer._id}
+                  className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
+                >
+                  <div className="flex items-center gap-4 w-full md:w-1/3 min-w-0 shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-inner">
+                      {customer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex flex-col items-start gap-1">
+                      <p className="font-semibold text-gray-900 truncate text-[15px] leading-tight w-full">
+                        {customer.name}
+                      </p>
+                      {customer.lastContactedAt ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                          {lastContactedOn(customer.lastContactedAt)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 border border-gray-200">
+                          Never Contacted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 w-full md:w-1/4 min-w-0 shrink-0">
+                    {customer.email ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
+                        <Mail size={13} className="text-gray-400 shrink-0" />
+                        <span className="truncate">{customer.email}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-gray-400 italic">
+                        <Mail size={13} className="shrink-0 opacity-50" />
+                        <span>No email</span>
+                      </div>
+                    )}
+                    {customer.phone ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
+                        <Phone size={13} className="text-gray-400 shrink-0" />
+                        <span className="truncate">{customer.phone}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-gray-400 italic">
+                        <Phone size={13} className="shrink-0 opacity-50" />
+                        <span>No phone</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* <div className="flex gap-1.5 flex-wrap flex-1">
+                  {customer.groups.map((g) => (
+                    <span
+                      key={g._id}
+                      className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
+                    >
+                      {g.name}
+                    </span>
+                  ))}
+                  {customer.groups.length === 0 && (
+                    <span className="text-[13px] text-gray-400 italic">
+                      No groups
+                    </span>
+                  )}
+                </div> */}
+
+                  <div className="flex items-center shrink-0 bg-gray-50/80 rounded-xl p-0.5 border border-gray-100 md:ml-auto self-end md:self-auto mt-2 md:mt-0">
+                    <button
+                      onClick={() => {
+                        // setEditing(customer);
+                        // setShowModal(true);
+                      }}
+                      className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition"
+                      title="Edit Customer"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      // onClick={() => setDeletingCustomer(customer)}
+                      className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"
+                      title="Delete Customer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="flex justify-center items-center flex-col col-span-2 text-center py-20">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Users size={28} className="text-gray-400" />
+              </div>
+              <p className="text-gray-500 font-medium">
+                {/* Add SEARCH */}
+                {search
+                  ? "No customers match your search."
+                  : "No customers yet. Add your first one!"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {isLoading && (
+          <div className="flex justify-center my-8">
+            <p className="text-gray-600 text-sm">Loading...</p>
+          </div>
+        )}
+
+        {/* Load More */}
+        {canLoadMore && (
+          <div className="flex justify-center my-8">
+            <Button
+              onClick={() => loadMore(CUSTOMERS_TO_FETCH)}
+              disabled={isLoadingMore}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 font-medium text-sm hover:bg-gray-50 transition shadow-sm hover:shadow-md disabled:opacity-50 cursor-pointer"
+            >
+              {isLoadingMore ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <ChevronDown size={15} />
+              )}
+              {isLoadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        )}
+
+        {!canLoadMore && !isLoadingMore && (
+          <div className="flex justify-center my-8">
+            <p className="text-gray-600 text-sm">
+              {results.length === 0
+                ? "No customer(s) found. Please add customer(s) to see them here."
+                : "All customers loaded"}
+            </p>
+          </div>
+        )}
+      </div>
       {/* Excel bulk create */}
       {showExcelImport && (
         <ImportModal
