@@ -40,6 +40,20 @@ export default function ProtectedLayout({
     { href: "/broadcasts", label: "Broadcasts", icon: Megaphone },
   ];
 
+  if (!isLoaded || business === undefined) {
+    return (
+      <div className="h-screen flex justify-center items-center">
+        <div
+          className="
+      w-8 h-8 rounded-full border-4 border-indigo-600 border-t-indigo-300 
+      animate-spin"
+        ></div>
+      </div>
+    );
+  }
+
+  if (business === null) return null;
+  
   return (
     <div className="flex h-screen bg-gray-50/50">
       <Authenticated>

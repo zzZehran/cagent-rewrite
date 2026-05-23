@@ -25,7 +25,17 @@ export default function DashboardPage() {
     if (business === null) router.push("/onboarding");
   }, [business]);
 
-  if (business === undefined) return null;
+  if (!isLoaded || business === undefined) {
+    return (
+      <div className="h-screen flex justify-center items-center">
+        <div
+          className="
+      w-8 h-8 rounded-full border-4 border-indigo-600 border-t-indigo-300 
+      animate-spin"
+        ></div>
+      </div>
+    );
+  }
   if (business === null) return null;
 
   return (
