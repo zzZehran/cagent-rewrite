@@ -10,8 +10,6 @@ import {
 
 import { useRouter } from "next/navigation";
 import {
-  Dispatch,
-  SetStateAction,
   useCallback,
   useEffect,
   useRef,
@@ -19,11 +17,9 @@ import {
 } from "react";
 import {
   Users,
-  Plus,
   Pencil,
   Trash2,
   X,
-  Check,
   Search,
   Mail,
   Phone,
@@ -40,14 +36,11 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Id } from "@/convex/_generated/dataModel";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { z } from "zod";
@@ -60,9 +53,21 @@ import { CUSTOMERS_TO_FETCH } from "@/constants";
 
 type Group = {
   _id: Id<"groups">;
-  _creationTime: number;
   name: string;
+};
+
+type Customer = {
+  _id: Id<"customers">;
+  _creationTime: number;
   businessId: Id<"business">;
+
+  name: string;
+  email?: string;
+  phone: string;
+
+  groups: Group[];
+
+  lastContactedAt?: number;
 };
 
 type ParsedRow = {
@@ -96,15 +101,24 @@ const customerFormSchema = z.object({
 type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 export function CustomerModal({
-  groups,
+  allGroups,
   businessId,
   createCustomer,
+  editing,
+  editCustomer,
+  customer,
 }: {
-  groups: Group[];
+  allGroups: Group[];
   businessId: Id<"business">;
-  createCustomer: ReactMutation<typeof api.customers.createCustomer>;
+  createCustomer?: ReactMutation<typeof api.customers.createCustomer>;
+  editCustomer?: ReactMutation<typeof api.customers.updateCustomer>;
+  editing: Boolean;
+  customer?: Customer;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
+  // const [selectedGroups, setSelectedGroups] = useState<Id<"groups">[]>(
+  //   customer?.groups.map((g) => g._id) ?? [],
+  // );
 
   const {
     register,
@@ -116,25 +130,42 @@ export function CustomerModal({
     resolver: zodResolver(customerFormSchema),
     mode: "onChange",
     defaultValues: {
-      name: "",
-      email: "",
-      phone: "",
-      groupIds: [],
+      name: customer?.name || "",
+      email: customer?.email || "",
+      phone: customer?.phone || "",
     },
   });
 
+  useEffect(() => {
+    if (customer) {
+      reset({
+        name: customer.name || "",
+        email: customer.email || "",
+        phone: customer.phone || "",
+        groupIds: customer.groups.map((g) => g._id),
+      });
+    }
+  }, [customer, reset]);
+
   async function onSubmit(data: CustomerFormData) {
     try {
-      const customerId = await createCustomer({ ...data, businessId });
-      if (customerId) {
+      if (createCustomer) {
+        const customerId = await createCustomer({ ...data, businessId });
+        if (customerId) {
+          reset();
+          setModalOpen(false);
+          console.log("Customer addedd successfully:", customerId);
+          toast.success("Customer added successfully");
+        }
+      } else if (customer && editCustomer) {
+        await editCustomer({ ...data, customerId: customer._id });
         reset();
         setModalOpen(false);
-        console.log("Customer addedd successfully:", customerId);
-        toast.success("Customer added successfully");
+        toast.success("Customer edited successfully.");
       }
     } catch (e) {
       console.log("Error in onSubmit:", e);
-      toast.error("Failed to add customer.");
+      toast.error("Error occured. Please try again.");
     }
   }
 
@@ -147,12 +178,21 @@ export function CustomerModal({
       }}
     >
       <DialogTrigger asChild>
-        <Button
-          type="button"
-          className="hover:cursor-pointer flex items-center gap-2 px-4 py-4 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-200"
-        >
-          + Add Customer
-        </Button>
+        {editing ? (
+          <Button
+            className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 bg-white hover:bg-white hover:shadow-sm transition"
+            title="Edit Customer"
+          >
+            <Pencil size={14} />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            className="hover:cursor-pointer flex items-center gap-2 px-4 py-4 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition shadow-sm shadow-indigo-200"
+          >
+            + Add Customer
+          </Button>
+        )}
       </DialogTrigger>
 
       <DialogContent
@@ -168,7 +208,7 @@ export function CustomerModal({
       >
         <DialogHeader className="mb-6 flex flex-row items-center justify-between space-y-0">
           <DialogTitle className="text-lg font-bold text-gray-900">
-            Add Customer
+            {editing ? "Edit Customer" : "Add Customer"}
           </DialogTitle>
         </DialogHeader>
 
@@ -259,7 +299,7 @@ export function CustomerModal({
           </div>
 
           {/* Groups */}
-          {groups.length > 0 && (
+          {allGroups.length > 0 && (
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Groups
@@ -275,7 +315,7 @@ export function CustomerModal({
                     onValueChange={field.onChange}
                     className="flex flex-wrap justify-start gap-2"
                   >
-                    {groups.map((g) => (
+                    {allGroups.map((g) => (
                       <ToggleGroupItem
                         key={g._id}
                         value={g._id}
@@ -327,7 +367,7 @@ export function CustomerModal({
             disabled:opacity-40
           "
             >
-              Add Customer
+              {editing ? "Update Customer" : "Add Customer"}
             </Button>
           </div>
         </form>
@@ -611,7 +651,7 @@ export default function CustomersPage() {
     api.business.getBusinessByOwnerId,
     isLoaded && isSignedIn && user ? { ownerId: user.id } : "skip",
   );
-  const groups = useQuery(
+  const allGroups = useQuery(
     api.groups.listByBusiness,
     business ? { businessId: business._id } : "skip",
   );
@@ -622,6 +662,8 @@ export default function CustomersPage() {
       ? { customerName: debouncedSearch, businessId: business._id }
       : "skip",
   );
+  const editCustomer = useMutation(api.customers.updateCustomer);
+
   const { results, status, loadMore, isLoading } = usePaginatedQuery(
     api.customers.getPaginatedCustomersByBusiness,
     business ? { businessId: business._id } : "skip",
@@ -676,8 +718,9 @@ export default function CustomersPage() {
 
           {/* Add single customer modal */}
           <CustomerModal
+            editing={false}
             businessId={business._id}
-            groups={groups ?? []}
+            allGroups={allGroups ?? []}
             createCustomer={createCustomer}
           />
 
@@ -712,13 +755,14 @@ export default function CustomersPage() {
             </div>
           )}
 
-          {search && searchedCustomers ? (
+          {searchedCustomers ? (
             <>
               {searchedCustomers.map((customer, idx) => (
                 <div
                   key={customer._id}
                   className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
                 >
+                  {/* Name */}
                   <div className="flex items-center gap-4 w-full md:w-1/3 min-w-0 shrink-0">
                     <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-inner">
                       {customer.name.charAt(0).toUpperCase()}
@@ -739,6 +783,7 @@ export default function CustomersPage() {
                     </div>
                   </div>
 
+                  {/* Contact */}
                   <div className="flex flex-col gap-1.5 w-full md:w-1/4 min-w-0 shrink-0">
                     {customer.email ? (
                       <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
@@ -764,33 +809,32 @@ export default function CustomersPage() {
                     )}
                   </div>
 
-                  {/* <div className="flex gap-1.5 flex-wrap flex-1">
-                  {customer.groups.map((g) => (
-                    <span
-                      key={g._id}
-                      className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
-                    >
-                      {g.name}
-                    </span>
-                  ))}
-                  {customer.groups.length === 0 && (
-                    <span className="text-[13px] text-gray-400 italic">
-                      No groups
-                    </span>
-                  )}
-                </div> */}
+                  {/* Groups */}
+                  <div className="flex gap-1.5 flex-wrap flex-1">
+                    {customer.groups.map((g) => (
+                      <span
+                        key={g._id}
+                        className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
+                      >
+                        {g.name}
+                      </span>
+                    ))}
+                    {customer.groups.length === 0 && (
+                      <span className="text-[13px] text-gray-400 italic">
+                        No groups
+                      </span>
+                    )}
+                  </div>
 
+                  {/* Edit/Delete Buttons */}
                   <div className="flex items-center shrink-0 bg-gray-50/80 rounded-xl p-0.5 border border-gray-100 md:ml-auto self-end md:self-auto mt-2 md:mt-0">
-                    <button
-                      onClick={() => {
-                        // setEditing(customer);
-                        // setShowModal(true);
-                      }}
-                      className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition"
-                      title="Edit Customer"
-                    >
-                      <Pencil size={14} />
-                    </button>
+                    <CustomerModal
+                      editing={true}
+                      businessId={business._id}
+                      allGroups={allGroups ?? []}
+                      editCustomer={editCustomer}
+                      customer={customer}
+                    />
                     <button
                       // onClick={() => setDeletingCustomer(customer)}
                       className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"
@@ -809,7 +853,7 @@ export default function CustomersPage() {
                   {results.map((customer, idx) => (
                     <div
                       key={customer._id}
-                      className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
+                      className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
                     >
                       <div className="flex items-center gap-4 w-full md:w-1/3 min-w-0 shrink-0">
                         <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-inner">
@@ -862,33 +906,30 @@ export default function CustomersPage() {
                         )}
                       </div>
 
-                      {/* <div className="flex gap-1.5 flex-wrap flex-1">
-                  {customer.groups.map((g) => (
-                    <span
-                      key={g._id}
-                      className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
-                    >
-                      {g.name}
-                    </span>
-                  ))}
-                  {customer.groups.length === 0 && (
-                    <span className="text-[13px] text-gray-400 italic">
-                      No groups
-                    </span>
-                  )}
-                </div> */}
+                      <div className="flex gap-1.5 flex-wrap flex-1">
+                        {customer.groups.map((g) => (
+                          <span
+                            key={g._id}
+                            className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
+                          >
+                            {g.name}
+                          </span>
+                        ))}
+                        {customer.groups.length === 0 && (
+                          <span className="text-[13px] text-gray-400 italic">
+                            No groups
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex items-center shrink-0 bg-gray-50/80 rounded-xl p-0.5 border border-gray-100 md:ml-auto self-end md:self-auto mt-2 md:mt-0">
-                        <button
-                          onClick={() => {
-                            // setEditing(customer);
-                            // setShowModal(true);
-                          }}
-                          className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition"
-                          title="Edit Customer"
-                        >
-                          <Pencil size={14} />
-                        </button>
+                        <CustomerModal
+                          editing={true}
+                          businessId={business._id}
+                          allGroups={allGroups ?? []}
+                          editCustomer={editCustomer}
+                          customer={customer}
+                        />
                         <button
                           // onClick={() => setDeletingCustomer(customer)}
                           className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"

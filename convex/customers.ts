@@ -94,7 +94,26 @@ export const getPaginatedCustomersByBusiness = query({
 
     if (!customers) throw new ConvexError("Failed to fetch users.");
 
-    return customers;
+    // Enrich each page item with its group names
+    const enrichedPage = await Promise.all(
+      customers.page.map(async (c) => {
+        const links = await ctx.db
+          .query("customerGroups")
+          .withIndex("by_customerId", (q) => q.eq("customerId", c._id))
+          .collect();
+        const groups = await Promise.all(
+          links.map((l) => ctx.db.get(l.groupId)),
+        );
+        return {
+          ...c,
+          groups: groups
+            .filter(Boolean)
+            .map((g) => ({ _id: g!._id, name: g!.name })),
+        };
+      }),
+    );
+
+    return { ...customers, page: enrichedPage };
   },
 });
 
@@ -110,6 +129,61 @@ export const getSearchedCustomers = query({
         q.search("name", args.customerName).eq("businessId", args.businessId),
       )
       .take(10);
-    return customers;  
+
+    if (!customers) throw new ConvexError("Failed to fetch users.");
+
+    // Enrich each page item with its group names
+    const enrichedCustomer = await Promise.all(
+      customers.map(async (c) => {
+        const links = await ctx.db
+          .query("customerGroups")
+          .withIndex("by_customerId", (q) => q.eq("customerId", c._id))
+          .collect();
+        const groups = await Promise.all(
+          links.map((l) => ctx.db.get(l.groupId)),
+        );
+        return {
+          ...c,
+          groups: groups
+            .filter(Boolean)
+            .map((g) => ({ _id: g!._id, name: g!.name })),
+        };
+      }),
+    );
+
+    return enrichedCustomer;
+  },
+});
+
+export const updateCustomer = mutation({
+  args: {
+    customerId: v.id("customers"),
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.string(),
+    groupIds: v.optional(v.array(v.id("groups"))),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.customerId, {
+      name: args.name,
+      email: args.email,
+      phone: args.phone,
+    });
+
+    if (args.groupIds !== undefined) {
+      // Remove all old links
+      const oldLinks = await ctx.db
+        .query("customerGroups")
+        .withIndex("by_customerId", (q) => q.eq("customerId", args.customerId))
+        .collect();
+      for (const link of oldLinks) await ctx.db.delete(link._id);
+      // Add all new links
+      for (const groupId of args.groupIds) {
+        await ctx.db.insert("customerGroups", {
+          customerId: args.customerId,
+          groupId,
+        });
+      }
+    }
   },
 });
