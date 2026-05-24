@@ -9,12 +9,7 @@ import {
 } from "convex/react";
 
 import { useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Users,
   Pencil,
@@ -36,6 +31,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -639,6 +636,40 @@ function ImportModal({
   );
 }
 
+function DeleteModal({
+  deleteFn,
+  customerId,
+}: {
+  deleteFn: ReactMutation<typeof api.customers.deleteCustomer>;
+  customerId: Id<"customers">;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 bg-white hover:bg-white hover:shadow-sm transition">
+        <Trash2 size={14} />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Are you sure?</DialogTitle>
+          <DialogDescription>This action cannot be undone.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={() => deleteFn({ customerId: customerId })}
+            variant={"destructive"}
+            type="submit"
+          >
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CustomersPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
@@ -676,6 +707,7 @@ export default function CustomersPage() {
 
   const createCustomer = useMutation(api.customers.createCustomer);
   const bulkCreateCustomers = useMutation(api.customers.bulkCreateCustomers);
+  const deleteCustomer = useMutation(api.customers.deleteCustomer);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -760,7 +792,7 @@ export default function CustomersPage() {
               {searchedCustomers.map((customer, idx) => (
                 <div
                   key={customer._id}
-                  className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
+                  className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
                 >
                   {/* Name */}
                   <div className="flex items-center gap-4 w-full md:w-1/3 min-w-0 shrink-0">
@@ -835,13 +867,10 @@ export default function CustomersPage() {
                       editCustomer={editCustomer}
                       customer={customer}
                     />
-                    <button
-                      // onClick={() => setDeletingCustomer(customer)}
-                      className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"
-                      title="Delete Customer"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <DeleteModal
+                      deleteFn={deleteCustomer}
+                      customerId={customer._id}
+                    />
                   </div>
                 </div>
               ))}
@@ -930,13 +959,10 @@ export default function CustomersPage() {
                           editCustomer={editCustomer}
                           customer={customer}
                         />
-                        <button
-                          // onClick={() => setDeletingCustomer(customer)}
-                          className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"
-                          title="Delete Customer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <DeleteModal
+                          deleteFn={deleteCustomer}
+                          customerId={customer._id}
+                        />
                       </div>
                     </div>
                   ))}

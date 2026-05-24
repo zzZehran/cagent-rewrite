@@ -187,3 +187,23 @@ export const updateCustomer = mutation({
     }
   },
 });
+
+export const deleteCustomer = mutation({
+  args: {
+    customerId: v.id("customers"),
+  },
+  handler: async (ctx, args) => {
+    const groupLinks = await ctx.db
+      .query("customerGroups")
+      .withIndex("by_customerId", (q) => q.eq("customerId", args.customerId))
+      .collect();
+
+    for (const groupLink of groupLinks) {
+      await ctx.db.delete(groupLink._id);
+    }
+
+    await ctx.db.delete(args.customerId);
+
+    //  await ctx.db.delete("customers", args.customerId)
+  },
+});
