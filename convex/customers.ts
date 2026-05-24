@@ -97,3 +97,19 @@ export const getPaginatedCustomersByBusiness = query({
     return customers;
   },
 });
+
+export const getSearchedCustomers = query({
+  args: {
+    businessId: v.id("business"),
+    customerName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const customers = await ctx.db
+      .query("customers")
+      .withSearchIndex("search_customerName", (q) =>
+        q.search("name", args.customerName).eq("businessId", args.businessId),
+      )
+      .take(10);
+    return customers;  
+  },
+});

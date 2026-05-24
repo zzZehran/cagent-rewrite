@@ -16,7 +16,7 @@ export default defineSchema({
     lastContactedAt: v.optional(v.number()),
   })
     .index("by_businessId", ["businessId"])
-    .searchIndex("search_name", {
+    .searchIndex("search_customerName", {
       searchField: "name",
       filterFields: ["businessId"],
     }),

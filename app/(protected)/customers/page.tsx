@@ -9,7 +9,14 @@ import {
 } from "convex/react";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Dispatch,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Users,
   Plus,
@@ -598,6 +605,7 @@ export default function CustomersPage() {
 
   const [showExcelImport, setShowExcelImport] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -608,6 +616,12 @@ export default function CustomersPage() {
     business ? { businessId: business._id } : "skip",
   );
 
+  const searchedCustomers = useQuery(
+    api.customers.getSearchedCustomers,
+    debouncedSearch && business
+      ? { customerName: debouncedSearch, businessId: business._id }
+      : "skip",
+  );
   const { results, status, loadMore, isLoading } = usePaginatedQuery(
     api.customers.getPaginatedCustomersByBusiness,
     business ? { businessId: business._id } : "skip",
@@ -620,6 +634,15 @@ export default function CustomersPage() {
 
   const createCustomer = useMutation(api.customers.createCustomer);
   const bulkCreateCustomers = useMutation(api.customers.bulkCreateCustomers);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [search]);
 
   useEffect(() => {
     if (business === null) router.push("/onboarding");
@@ -674,8 +697,7 @@ export default function CustomersPage() {
             size={16}
             className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
           />
-          <input
-            value={search}
+          <Input
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search loaded customers by name, email or phone…"
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-800 placeholder-gray-400 text-sm shadow-sm"
@@ -690,9 +712,9 @@ export default function CustomersPage() {
             </div>
           )}
 
-          {results ? (
+          {search && searchedCustomers ? (
             <>
-              {results.map((customer, idx) => (
+              {searchedCustomers.map((customer, idx) => (
                 <div
                   key={customer._id}
                   className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
@@ -781,17 +803,116 @@ export default function CustomersPage() {
               ))}
             </>
           ) : (
-            <div className="flex justify-center items-center flex-col col-span-2 text-center py-20">
-              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Users size={28} className="text-gray-400" />
-              </div>
-              <p className="text-gray-500 font-medium">
-                {/* Add SEARCH */}
-                {search
-                  ? "No customers match your search."
-                  : "No customers yet. Add your first one!"}
-              </p>
-            </div>
+            <>
+              {results ? (
+                <>
+                  {results.map((customer, idx) => (
+                    <div
+                      key={customer._id}
+                      className="col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-100 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center gap-4 md:gap-6"
+                    >
+                      <div className="flex items-center gap-4 w-full md:w-1/3 min-w-0 shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-inner">
+                          {customer.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex flex-col items-start gap-1">
+                          <p className="font-semibold text-gray-900 truncate text-[15px] leading-tight w-full">
+                            {customer.name}
+                          </p>
+                          {customer.lastContactedAt ? (
+                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                              {lastContactedOn(customer.lastContactedAt)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 border border-gray-200">
+                              Never Contacted
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 w-full md:w-1/4 min-w-0 shrink-0">
+                        {customer.email ? (
+                          <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
+                            <Mail
+                              size={13}
+                              className="text-gray-400 shrink-0"
+                            />
+                            <span className="truncate">{customer.email}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-sm text-gray-400 italic">
+                            <Mail size={13} className="shrink-0 opacity-50" />
+                            <span>No email</span>
+                          </div>
+                        )}
+                        {customer.phone ? (
+                          <div className="flex items-center gap-2 text-sm text-gray-600 truncate">
+                            <Phone
+                              size={13}
+                              className="text-gray-400 shrink-0"
+                            />
+                            <span className="truncate">{customer.phone}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-sm text-gray-400 italic">
+                            <Phone size={13} className="shrink-0 opacity-50" />
+                            <span>No phone</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* <div className="flex gap-1.5 flex-wrap flex-1">
+                  {customer.groups.map((g) => (
+                    <span
+                      key={g._id}
+                      className="px-2 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 text-[11px] font-medium border border-indigo-100/50"
+                    >
+                      {g.name}
+                    </span>
+                  ))}
+                  {customer.groups.length === 0 && (
+                    <span className="text-[13px] text-gray-400 italic">
+                      No groups
+                    </span>
+                  )}
+                </div> */}
+
+                      <div className="flex items-center shrink-0 bg-gray-50/80 rounded-xl p-0.5 border border-gray-100 md:ml-auto self-end md:self-auto mt-2 md:mt-0">
+                        <button
+                          onClick={() => {
+                            // setEditing(customer);
+                            // setShowModal(true);
+                          }}
+                          className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm transition"
+                          title="Edit Customer"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          // onClick={() => setDeletingCustomer(customer)}
+                          className="hover:cursor-pointer p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white hover:shadow-sm transition"
+                          title="Delete Customer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="flex justify-center items-center flex-col col-span-2 text-center py-20">
+                  <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Users size={28} className="text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 font-medium">
+                    {search
+                      ? "No customers match your search."
+                      : "No customers yet. Add your first one!"}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
 
