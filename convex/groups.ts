@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 export const listByBusiness = query({
   args: { businessId: v.id("business") },
@@ -10,5 +10,30 @@ export const listByBusiness = query({
       .collect();
 
     return groups;
+  },
+});
+
+export const createCustomerGroup = mutation({
+  args: { businessId: v.id("business"), groupName: v.string() },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.insert("groups", {
+      businessId: args.businessId,
+      name: args.groupName,
+    });
+
+    if (!group) throw new ConvexError("Failed to create group.");
+  },
+});
+
+export const updateCustomer = mutation({
+  args: { groupId: v.id("groups"), groupName: v.string() },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.get(args.groupId)
+
+    if (!group) {
+      throw new ConvexError("Group doesn't exist");
+    }
+
+    const updatedGroup = await ctx.db.patch(args.groupId, { name: args.groupName });
   },
 });
