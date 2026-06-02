@@ -25,15 +25,35 @@ export const createCustomerGroup = mutation({
   },
 });
 
-export const updateCustomer = mutation({
+export const updateGroup = mutation({
   args: { groupId: v.id("groups"), groupName: v.string() },
   handler: async (ctx, args) => {
-    const group = await ctx.db.get(args.groupId)
+    const group = await ctx.db.get(args.groupId);
 
     if (!group) {
       throw new ConvexError("Group doesn't exist");
     }
 
-    const updatedGroup = await ctx.db.patch(args.groupId, { name: args.groupName });
+    const updatedGroup = await ctx.db.patch(args.groupId, {
+      name: args.groupName,
+    });
+  },
+});
+
+export const deleteGroup = mutation({
+  args: {
+    businessId: v.id("business"),
+    groupId: v.id("groups"),
+  },
+  handler: async (ctx, args) => {
+    const groups = await ctx.db
+      .query("groups")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    const foundGroup = groups.find((group) => group._id === args.groupId);
+    if (!foundGroup) throw new ConvexError("Group not found.");
+
+    await ctx.db.delete("groups", args.groupId);
   },
 });

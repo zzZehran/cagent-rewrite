@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
-import { Pencil, Plus, Tags, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Tags, Trash2, Users, X } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import z from "zod";
-import { useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { Id } from "@/convex/_generated/dataModel";
@@ -30,165 +30,21 @@ const PALETTE = [
   "from-cyan-500 to-sky-500",
 ];
 
-// function groupDialog(
-//   editing: boolean,
-//   handleSubmit: Promise<void>,
-//   groupName?: string,
-// ) {
-//   const [formError, setFormError] = useState("");
-//   return (
-//     <Dialog>
-//       <DialogTrigger asChild>
-//         {editing ? (
-//           <Button
-//             variant={"outline"}
-//             className="
-//               p-2
-//               text-gray-400
-//               rounded-xl
-//               hover:text-emerald-600 hover:bg-emerald-50 transition
-//             "
-//           >
-//             <Pencil size={15} />
-//           </Button>
-//         ) : (
-//           <Button
-//             variant={"outline"}
-//             className="
-//               p-2
-//               text-gray-400
-//               rounded-xl
-//               hover:text-emerald-600 hover:bg-emerald-50 transition
-//             "
-//           >
-//             <Pencil size={15} />
-//           </Button>
-//         )}
-//       </DialogTrigger>
-
-//       <DialogContent
-//         className="
-//           max-w-sm
-//           p-7
-//           bg-white
-//           rounded-3xl border-0
-//           shadow-2xl
-//           gap-0
-//         "
-//       >
-//         <DialogHeader
-//           className="
-//             mb-5
-//           "
-//         >
-//           <DialogTitle
-//             className="
-//               text-lg font-bold text-gray-900
-//             "
-//           >
-//             {editing ? "Edit Group" : "Create Group"}
-//           </DialogTitle>
-//         </DialogHeader>
-
-//         <form action={handleSubmit}>
-//           <div
-//             className="
-//               space-y-4
-//             "
-//           >
-//             <div>
-//               <Label
-//                 htmlFor="groupName"
-//                 className="
-//                   block
-//                   mb-1
-//                   text-xs font-semibold text-gray-500 tracking-wider
-//                   uppercase
-//                 "
-//               >
-//                 Group Name{" "}
-//                 <span
-//                   className="
-//                     text-red-400
-//                   "
-//                 >
-//                   *
-//                 </span>
-//               </Label>
-
-//               <Input
-//                 id="groupName"
-//                 defaultValue={group.name}
-//                 name="name"
-//                 placeholder="e.g. Retail, VIP, Wholesale"
-//                 className="
-//                   h-11
-//                   px-4
-//                   text-sm
-//                   rounded-xl border-gray-200
-//                   placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-emerald-400
-//                 "
-//               />
-//               {formError && (
-//                 <span
-//                   className="
-//                     text-xs text-red-500
-//                   "
-//                 >
-//                   *{formError}
-//                 </span>
-//               )}
-//             </div>
-
-//             <div
-//               className="
-//                 flex
-//                 pt-1
-//                 gap-3
-//               "
-//             >
-//               <DialogClose asChild>
-//                 <Button
-//                   type="button"
-//                   variant="outline"
-//                   className="
-//                     flex-1
-//                     h-11
-//                     text-gray-600 font-semibold
-//                     rounded-xl border-gray-200
-//                     hover:bg-gray-50
-//                   "
-//                 >
-//                   Cancel
-//                 </Button>
-//               </DialogClose>
-
-//               <Button
-//                 type="submit"
-//                 className="
-//                   flex-1
-//                   h-11
-//                   font-semibold
-//                   bg-emerald-600
-//                   rounded-xl
-//                   hover:bg-emerald-700
-//                 "
-//               >
-//                 Update Group
-//               </Button>
-//             </div>
-//           </div>
-//         </form>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// }
+type Group = {
+  _id: Id<"groups">;
+  _creationTime: number;
+  name: string;
+  businessId: Id<"business">;
+};
 
 export default function page() {
   const { user, isLoaded, isSignedIn } = useUser();
   const router = useRouter();
   const [formError, setFormError] = useState("");
-  const [editDialog, setEditDialog] = useState<Id<"groups"> | null>();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Group | null>();
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -201,7 +57,8 @@ export default function page() {
   );
 
   const createGroup = useMutation(api.groups.createCustomerGroup);
-  const updateGroup = useMutation(api.groups.updateCustomer);
+  const updateGroup = useMutation(api.groups.updateGroup);
+  const deletGroup = useMutation(api.groups.deleteGroup);
 
   useEffect(() => {
     if (business === null) {
@@ -209,6 +66,7 @@ export default function page() {
     }
   }, [router, business]);
 
+  // Loader
   if (business === undefined) {
     return (
       <div
@@ -228,6 +86,8 @@ export default function page() {
       </div>
     );
   }
+
+  if (business === null) return null;
 
   const formSchema = z.object({
     name: z.string().min(1, "Name cannot be blank"),
@@ -253,22 +113,26 @@ export default function page() {
           toast.error(error.data);
         }
       }
+      setDialogOpen(false);
+      
     } else if (editing) {
       if (!groupId) return;
+
       try {
         setFormError("");
         formSchema.parse({ name });
         await updateGroup({ groupId: groupId, groupName: name });
         toast.success("Group upated successfully");
-        setEditDialog(null);
       } catch (error: any) {
         if (error instanceof z.ZodError) {
           setFormError(error.issues[0].message);
         } else {
           toast.error(error.data);
-          setEditDialog(null);
         }
       }
+
+      setEditingGroup(null);
+      setDialogOpen(false);
     }
   }
 
@@ -334,10 +198,11 @@ export default function page() {
             )}
           </div>
 
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button
-                className="
+          <Button
+            onClick={() => {
+              setDialogOpen(true);
+            }}
+            className="
                   flex
                   px-4 py-2
                   text-white text-sm font-semibold
@@ -346,126 +211,10 @@ export default function page() {
                   shadow-sm shadow-emerald-200
                   items-center gap-2 hover:bg-emerald-700 transition
                 "
-              >
-                <Plus size={16} />
-                New Group
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent
-              className="
-                max-w-sm
-                p-7
-                bg-white
-                rounded-3xl border-0
-                shadow-2xl
-                gap-0
-              "
-            >
-              <DialogHeader
-                className="
-                  mb-5
-                "
-              >
-                <DialogTitle
-                  className="
-                    text-lg font-bold text-gray-900
-                  "
-                >
-                  New Group
-                </DialogTitle>
-              </DialogHeader>
-
-              <form action={handleSubmit}>
-                <div
-                  className="
-                    space-y-4
-                  "
-                >
-                  <div>
-                    <Label
-                      htmlFor="groupName"
-                      className="
-                        block
-                        mb-1
-                        text-xs font-semibold text-gray-500 tracking-wider
-                        uppercase
-                      "
-                    >
-                      Group Name{" "}
-                      <span
-                        className="
-                          text-red-400
-                        "
-                      >
-                        *
-                      </span>
-                    </Label>
-
-                    <Input
-                      id="groupName"
-                      name="name"
-                      placeholder="e.g. Retail, VIP, Wholesale"
-                      className="
-                        h-11
-                        px-4
-                        text-sm
-                        rounded-xl border-gray-200
-                        placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-emerald-400
-                      "
-                    />
-                    {formError && (
-                      <span
-                        className="
-                          text-xs text-red-500
-                        "
-                      >
-                        *{formError}
-                      </span>
-                    )}
-                  </div>
-
-                  <div
-                    className="
-                      flex
-                      pt-1
-                      gap-3
-                    "
-                  >
-                    <DialogClose asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="
-                          flex-1
-                          h-11
-                          text-gray-600 font-semibold
-                          rounded-xl border-gray-200
-                          hover:bg-gray-50
-                        "
-                      >
-                        Cancel
-                      </Button>
-                    </DialogClose>
-
-                    <Button
-                      type="submit"
-                      className="
-                        flex-1
-                        h-11
-                        font-semibold
-                        bg-emerald-600
-                        rounded-xl
-                        hover:bg-emerald-700
-                      "
-                    >
-                      Create Group
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          >
+            <Plus size={16} />
+            New Group
+          </Button>
         </div>
       </div>
 
@@ -589,151 +338,41 @@ export default function page() {
                       items-center gap-1 shrink-0
                     "
                   >
-                    <Dialog
-                      open={editDialog === group._id}
-                      onOpenChange={(open) =>
-                        setEditDialog(open ? group._id : null)
-                      }
-                    >
-                      <DialogTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className="
-                            p-2
-                            text-gray-400
-                            rounded-xl
-                            hover:text-emerald-600 hover:bg-emerald-50 transition
-                          "
-                        >
-                          <Pencil size={15} />
-                        </Button>
-                      </DialogTrigger>
-
-                      <DialogContent
-                        className="
-                          max-w-sm
-                          p-7
-                          bg-white
-                          rounded-3xl border-0
-                          shadow-2xl
-                          gap-0
-                        "
-                      >
-                        <DialogHeader
-                          className="
-                            mb-5
-                          "
-                        >
-                          <DialogTitle
-                            className="
-                              text-lg font-bold text-gray-900
-                            "
-                          >
-                            Edit Group
-                          </DialogTitle>
-                        </DialogHeader>
-
-                        <form action={(e) => handleSubmit(e, true, group._id)}>
-                          <div
-                            className="
-                              space-y-4
-                            "
-                          >
-                            <div>
-                              <Label
-                                htmlFor="groupName"
-                                className="
-                                  block
-                                  mb-1
-                                  text-xs font-semibold text-gray-500 tracking-wider
-                                  uppercase
-                                "
-                              >
-                                Group Name{" "}
-                                <span
-                                  className="
-                                    text-red-400
-                                  "
-                                >
-                                  *
-                                </span>
-                              </Label>
-
-                              <Input
-                                id="groupName"
-                                defaultValue={group.name}
-                                name="name"
-                                placeholder="e.g. Retail, VIP, Wholesale"
-                                className="
-                                  h-11
-                                  px-4
-                                  text-sm
-                                  rounded-xl border-gray-200
-                                  placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-emerald-400
-                                "
-                              />
-                              {formError && (
-                                <span
-                                  className="
-                                    text-xs text-red-500
-                                  "
-                                >
-                                  *{formError}
-                                </span>
-                              )}
-                            </div>
-
-                            <div
-                              className="
-                                flex
-                                pt-1
-                                gap-3
-                              "
-                            >
-                              <DialogClose asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="
-                                    flex-1
-                                    h-11
-                                    text-gray-600 font-semibold
-                                    rounded-xl border-gray-200
-                                    hover:bg-gray-50
-                                  "
-                                >
-                                  Cancel
-                                </Button>
-                              </DialogClose>
-
-                              <Button
-                                type="submit"
-                                className="
-                                  flex-1
-                                  h-11
-                                  font-semibold
-                                  bg-emerald-600
-                                  rounded-xl
-                                  hover:bg-emerald-700
-                                "
-                              >
-                                Update Group
-                              </Button>
-                            </div>
-                          </div>
-                        </form>
-                      </DialogContent>
-                    </Dialog>
-                    <button
+                    <Button
+                      onClick={() => {
+                        setIsEditing(true);
+                        setDialogOpen(true);
+                        setEditingGroup(group);
+                      }}
+                      variant={"outline"}
                       className="
                         p-2
                         text-gray-400
                         rounded-xl
+                        border-none
+                        hover:text-emerald-500 hover:bg-emerald-50 transition
+                      "
+                    >
+                      <Pencil size={15} />
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        deletGroup({
+                          businessId: business._id,
+                          groupId: group._id,
+                        })
+                      }
+                      variant={"outline"}
+                      className="
+                        p-2
+                        text-gray-400
+                        rounded-xl
+                        border-none
                         hover:text-red-500 hover:bg-red-50 transition
                       "
                     >
                       <Trash2 size={15} />
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -741,6 +380,130 @@ export default function page() {
           </div>
         </div>
       )}
+
+      {/* Add group/edit group dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent
+          className="
+          max-w-sm
+          p-7
+          bg-white
+          rounded-3xl border-0
+          shadow-2xl
+          gap-0
+        "
+        >
+          <DialogHeader
+            className="
+            mb-5
+          "
+          >
+            <DialogTitle
+              className="
+              text-lg font-bold text-gray-900
+            "
+            >
+              {isEditing ? "Edit Group" : "Create Group"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form
+            action={(e) => {
+              if (isEditing && editingGroup)
+                return handleSubmit(e, true, editingGroup._id);
+              return handleSubmit(e);
+            }}
+          >
+            <div
+              className="
+              space-y-4
+            "
+            >
+              <div>
+                <Label
+                  htmlFor="groupName"
+                  className="
+                  block
+                  mb-1
+                  text-xs font-semibold text-gray-500 tracking-wider
+                  uppercase
+                "
+                >
+                  Group Name{" "}
+                  <span
+                    className="
+                    text-red-400
+                  "
+                  >
+                    *
+                  </span>
+                </Label>
+
+                <Input
+                  id="groupName"
+                  defaultValue={editingGroup ? editingGroup.name : ""}
+                  name="name"
+                  placeholder="e.g. Retail, VIP, Wholesale"
+                  className="
+                  h-11
+                  px-4
+                  text-sm
+                  rounded-xl border-gray-200
+                  placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-emerald-400
+                "
+                />
+                {formError && (
+                  <span
+                    className="
+                    text-xs text-red-500
+                  "
+                  >
+                    *{formError}
+                  </span>
+                )}
+              </div>
+
+              <div
+                className="
+                flex
+                pt-1
+                gap-3
+              "
+              >
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="
+                    flex-1
+                    h-11
+                    text-gray-600 font-semibold
+                    rounded-xl border-gray-200
+                    hover:bg-gray-50
+                  "
+                  >
+                    Cancel
+                  </Button>
+                </DialogClose>
+
+                <Button
+                  type="submit"
+                  className="
+                  flex-1
+                  h-11
+                  font-semibold
+                  bg-emerald-600
+                  rounded-xl
+                  hover:bg-emerald-700
+                "
+                >
+                  {isEditing ? "Update Group" : "Create Group"}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
