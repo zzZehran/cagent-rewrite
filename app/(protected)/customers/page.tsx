@@ -75,7 +75,6 @@ type ParsedRow = {
 };
 
 function lastContactedOn(timestamp: number) {
-  console.log(timestamp);
   const diff = Date.now() - timestamp;
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   if (days <= 1) return "Today";
@@ -161,7 +160,6 @@ export function CustomerModal({
         toast.success("Customer edited successfully.");
       }
     } catch (e) {
-      console.log("Error in onSubmit:", e);
       toast.error("Error occured. Please try again.");
     }
   }
