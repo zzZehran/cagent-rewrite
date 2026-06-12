@@ -44,8 +44,9 @@ export default defineSchema({
     display_name: v.string(), //name in interakt
     category: v.union(v.literal("Utility"), v.literal("Marketing")),
     localName: v.string(), //name in db
-    headerVariables: v.optional(v.array(v.string())),
-    bodyVariables: v.optional(v.array(v.string())),
+    header: v.optional(v.string()),
+    body: v.string(),
+    body_text: v.optional(v.array(v.string())),
     status: v.union(
       v.literal("Approved"),
       v.literal("Pending"),
@@ -60,5 +61,6 @@ export default defineSchema({
     header_handle: v.optional(v.string()),
     header_handle_file_url: v.optional(v.string()),
     header_handle_file_name: v.optional(v.string()),
-  }),
+    footer: v.optional(v.string())
+  }).index("by_businessId", ["businessId"]),
 });

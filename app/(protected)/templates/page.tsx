@@ -31,7 +31,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import { toast } from "react-toastify";
@@ -42,7 +42,7 @@ const templateSchema = z.object({
   display_name: z.string().min(1, "Display name is required."),
   category: z.enum(["Utility", "Marketing"]),
   header_format: z.enum(["NONE", "TEXT", "IMAGE"]),
-  header: z.string(),
+  header: z.string().optional(),
   header_text: z.string().optional(), //variable value inside the header, comma separated
   body: z.string().min(1, "Template body is required"),
   body_text: z.string().optional(), //variable value inside the body, comma separated
@@ -51,7 +51,56 @@ const templateSchema = z.object({
 
 type TemplateType = z.infer<typeof templateSchema>;
 
-function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
+function WhatsappPreview({
+  header,
+  body,
+  footer,
+}: {
+  header?: string;
+  body: string;
+  footer?: string;
+}) {
+  return (
+    <div className="flex justify-center p-5">
+      <div className="h-[82vh] w-80 overflow-hidden rounded-[28px] border-4 border-zinc-800 bg-[#e5ddd5] shadow-lg">
+        {/* Header */}
+        <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
+          <div className="h-10 w-10 rounded-full bg-zinc-200" />
+
+          <div>
+            <p className="text-sm font-medium">Your Business</p>
+            <p className="text-xs opacity-80">online</p>
+          </div>
+        </div>
+
+        {/* Chat */}
+        <div className="flex h-full flex-col gap-3 p-4">
+          {/* Message */}
+          <div className="max-w-[95%] h-auto rounded-lg rounded-tl-none bg-white p-3 shadow-sm">
+            <p className="font-bold">{header}</p>
+            <p className="text-sm flex whitespace-pre-wrap break-all">{body}</p>
+
+            <p className="text-xs text-gray-400">{footer}</p>
+
+            <p className="mt-1 text-right text-[10px] text-muted-foreground">
+              10:42 AM
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RegisterTemplate({
+  businessId,
+  showTemplateForm,
+  setShowTemplateForm,
+}: {
+  businessId: Id<"business">;
+  showTemplateForm: boolean;
+  setShowTemplateForm: (value: boolean) => void;
+}) {
   const registerTemplate = useAction(api.templates.registerTemplate);
 
   const {
@@ -59,7 +108,8 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
     control,
     handleSubmit,
     watch,
-    formState: { errors },
+    reset,
+    formState: { errors, isSubmitting },
   } = useForm<TemplateType>({
     resolver: zodResolver(templateSchema),
     mode: "onChange",
@@ -74,6 +124,8 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
         header_text: data.header_text ? [data.header_text] : [],
       });
       toast.success("Template created successfully.");
+      setShowTemplateForm(false);
+      reset();
     } catch (e: any) {
       if (e instanceof ConvexError) {
         toast.error(`Error: ${e.data}`);
@@ -84,7 +136,7 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
   };
 
   return (
-    <Dialog>
+    <Dialog open={showTemplateForm} onOpenChange={setShowTemplateForm}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
@@ -108,7 +160,15 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
           "
       >
         <div className="grid grid-cols-2 gap-6">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+              }
+            }}
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-6"
+          >
             <DialogHeader>
               <DialogTitle>Register new template</DialogTitle>
             </DialogHeader>
@@ -286,40 +346,17 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
 
-              <Button type="submit">Submit</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </Button>
             </DialogFooter>
           </form>
           {/* whatsapp preview block */}
-          <div className="flex justify-center p-5">
-            <div className="h-[82vh] w-80 overflow-hidden rounded-[28px] border-4 border-zinc-800 bg-[#e5ddd5] shadow-lg">
-              {/* Header */}
-              <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3 text-white">
-                <div className="h-10 w-10 rounded-full bg-zinc-200" />
-
-                <div>
-                  <p className="text-sm font-medium">Your Business</p>
-                  <p className="text-xs opacity-80">online</p>
-                </div>
-              </div>
-
-              {/* Chat */}
-              <div className="flex h-full flex-col gap-3 p-4">
-                {/* Message */}
-                <div className="max-w-[95%] h-auto rounded-lg rounded-tl-none bg-white p-3 shadow-sm">
-                  <p className="font-bold">{watch("header")}</p>
-                  <p className="text-sm flex whitespace-pre-wrap break-all">
-                    {watch("body")}
-                  </p>
-
-                  <p className="text-xs text-gray-400">{watch("footer")}</p>
-
-                  <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                    10:42 AM
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <WhatsappPreview
+            header={watch("header")}
+            body={watch("body")}
+            footer={watch("footer")}
+          />
         </div>
       </DialogContent>
     </Dialog>
@@ -329,23 +366,21 @@ function RegisterTemplate({ businessId }: { businessId: Id<"business"> }) {
 export default function page() {
   const { user, isSignedIn, isLoaded } = useUser();
   const router = useRouter();
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [showPreviewTemplate, setShowPreviewTemplate] = useState(false);
+  const [previewHeader, setPreviewHeader] = useState<string | undefined>("");
+  const [previewBody, setPreviewBody] = useState("");
+  const [previewFooter, setPreviewFooter] = useState<string | undefined>("");
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
     isLoaded && isSignedIn && user ? { ownerId: user.id } : "skip",
   );
 
-  if (!isLoaded || business === undefined) {
-    return (
-      <div className="h-screen flex justify-center items-center">
-        <div
-          className="
-      w-8 h-8 rounded-full border-4 border-indigo-600 border-t-indigo-300 
-      animate-spin"
-        ></div>
-      </div>
-    );
-  }
+  const allTemplates = useQuery(
+    api.templates.getTemplatesByBusinessId,
+    business ? { businessId: business._id } : "skip",
+  );
 
   useEffect(() => {
     if (business === null) router.push("/onboarding");
@@ -368,6 +403,10 @@ export default function page() {
     <div
       className="
         min-h-full
+
+            max-w-5xl
+            mx-auto px-6 py-4
+            items-center gap-4
       "
     >
       <div
@@ -378,12 +417,10 @@ export default function page() {
           backdrop-blur-md sticky top-0
         "
       >
+        {/* Header */}
         <div
           className="
             flex
-            max-w-5xl
-            mx-auto px-6 py-4
-            items-center gap-4
           "
         >
           <div
@@ -442,9 +479,119 @@ export default function page() {
             </Button>
 
             {/* Add new template button */}
-            <RegisterTemplate businessId={business._id} />
+            <RegisterTemplate
+              businessId={business._id}
+              showTemplateForm={showTemplateForm}
+              setShowTemplateForm={setShowTemplateForm}
+            />
           </div>
         </div>
+
+        {/*Templates  */}
+        <div className="grid grid-cols-3 gap-2">
+          {allTemplates &&
+            allTemplates.map((template) => {
+              return (
+                <div
+                  onClick={() => {
+                    setShowPreviewTemplate(true);
+                    setPreviewHeader(template.header);
+                    setPreviewBody(template.body);
+                    setPreviewFooter(template.footer);
+                  }}
+                  key={template._id}
+                  className="hover:cursor-pointer mt-8 col-span-1 relative h-full bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-emerald-100 hover:shadow-md transition-all flex flex-col gap-4"
+                >
+                  {/* Status Badge */}
+                  {template.status && (
+                    <div className="absolute top-4 right-4 z-10">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          template.status === "Approved"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : template.status === "Rejected"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {template.status}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Icon */}
+                  <div className="flex items-start justify-between shrink-0">
+                    <div
+                      className={`w-11 h-11 rounded-2xl bg-linear-to-br flex items-center justify-center text-white font-bold text-lg shrink-0`}
+                    >
+                      {template.localName.charAt(0).toUpperCase()}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 flex flex-col">
+                    <p className="text-lg font-semibold text-gray-900 pr-20 line-clamp-2">
+                      {template.localName}
+                    </p>
+
+                    <p className="text-xs text-gray-500 mt-1 font-mono truncate">
+                      {template.display_name}
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5 mt-3 mb-4">
+                      {template.body_text?.map((v) => (
+                        <span
+                          key={v}
+                          className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-[10px] font-medium"
+                        >
+                          {v}
+                        </span>
+                      ))}
+
+                      {template.body_text?.length === 0 && (
+                        <span className="text-xs text-gray-400 italic">
+                          No variables
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-auto pt-2">
+                      {template.status === "Approved" ? (
+                        <button
+                          // onClick={() => setViewTemplateId(template._id)}
+                          className="hover:cursor-pointer w-full py-2 bg-emerald-50 text-emerald-700 font-semibold text-xs rounded-xl hover:bg-emerald-100 transition"
+                        >
+                          Overview Template
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="w-full py-2 bg-amber-50 text-amber-700 font-semibold text-xs rounded-xl transition opacity-80"
+                        >
+                          <i>Waiting for approval</i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Template Quickview */}
+        <Dialog
+          open={showPreviewTemplate}
+          onOpenChange={setShowPreviewTemplate}
+        >
+          <DialogContent>
+            <DialogTitle></DialogTitle>
+            <WhatsappPreview
+              header={previewHeader}
+              body={previewBody}
+              footer={previewFooter}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

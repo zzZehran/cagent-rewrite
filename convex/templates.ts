@@ -40,11 +40,13 @@ export const createTemplate = internalMutation({
       display_name: args.display_name,
       category: args.category,
       localName: args.localName,
+      header: args.header,
       header_format: args.header_format,
       header_text: args.header_text,
-      headerVariables: args.header_text,
-      bodyVariables: args.body_text,
+      body: args.body,
+      body_text: args.body_text,
       status: "Pending",
+      footer: args.footer
     });
     if (!res) throw new ConvexError("Failed to add template.");
     return res;
@@ -62,7 +64,7 @@ export const registerTemplate = action({
       v.literal("TEXT"),
       v.literal("IMAGE"),
     ),
-    header: v.string(),
+    header: v.optional(v.string()),
     header_text: v.array(v.string()),
     body: v.string(),
     body_text: v.array(v.string()),
@@ -109,7 +111,7 @@ export const registerTemplate = action({
       requestOptions,
     );
     if (!response.ok) {
-      const res = await response.json()
+      const res = await response.json();
       throw new ConvexError(res.message);
     }
     const res = await ctx.runMutation(internal.templates.createTemplate, {
@@ -125,5 +127,19 @@ export const registerTemplate = action({
       footer: args.footer,
     });
     return "success";
+  },
+});
+
+export const getTemplatesByBusinessId = query({
+  args: {
+    businessId: v.id("business"),
+  },
+  handler: async (ctx, args) => {
+    const templates = await ctx.db
+      .query("whatsappTemplates")
+      .withIndex("by_businessId", (q) => q.eq("businessId", args.businessId))
+      .collect();
+
+    return templates;
   },
 });
