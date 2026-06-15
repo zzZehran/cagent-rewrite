@@ -16,6 +16,23 @@ type templateBody = {
   footer?: string;
 };
 
+type MediaHandlerType = {
+  result: boolean;
+  message: string;
+  data: {
+    file_url: string;
+    file_handle: string;
+    file_name: string;
+  };
+};
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 export const createTemplate = internalMutation({
   args: {
     businessId: v.id("business"),
@@ -29,7 +46,10 @@ export const createTemplate = internalMutation({
     ),
     header: v.optional(v.string()),
     header_text: v.array(v.string()),
-    body: v.string(), //not using yet
+    header_handle: v.optional(v.string()),
+    header_handle_file_url: v.optional(v.string()),
+    header_handle_file_name: v.optional(v.string()),
+    body: v.string(),
     body_text: v.array(v.string()),
     footer: v.optional(v.string()),
   },
@@ -43,10 +63,13 @@ export const createTemplate = internalMutation({
       header: args.header,
       header_format: args.header_format,
       header_text: args.header_text,
+      header_handle: args.header_format,
+      header_handle_file_url: args.header_handle_file_url,
+      header_handle_file_name: args.header_handle_file_name,
       body: args.body,
       body_text: args.body_text,
       status: "Pending",
-      footer: args.footer
+      footer: args.footer,
     });
     if (!res) throw new ConvexError("Failed to add template.");
     return res;
@@ -69,6 +92,8 @@ export const registerTemplate = action({
     body: v.string(),
     body_text: v.array(v.string()),
     footer: v.optional(v.string()),
+    headerImageId: v.optional(v.string()),
+    headerImageName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const headers = new Headers();
@@ -76,6 +101,8 @@ export const registerTemplate = action({
     headers.append("Content-Type", "application/json");
 
     let body;
+
+    //No header
     if (!args.header_format || args.header_format === "NONE") {
       body = {
         language: "English",
@@ -85,7 +112,9 @@ export const registerTemplate = action({
         body_text: args.body_text,
         footer: args.footer ? args.footer : null,
       };
-    } else if (args.header_format === "TEXT") {
+    }
+    //Text header
+    else if (args.header_format === "TEXT") {
       body = {
         language: "English",
         display_name: args.display_name,
@@ -98,6 +127,45 @@ export const registerTemplate = action({
         footer: args.footer ? args.footer : null,
       };
     }
+    //Image header
+    else if (args.header_format === "IMAGE" && args.headerImageId) {
+      const headerUrl = await ctx.storage.getUrl(args.headerImageId);
+
+      if (!headerUrl) {
+        throw new Error("Image not found");
+      }
+      const headerImageResponse = await fetch(headerUrl);
+      const headerImageBlob = await headerImageResponse.blob();
+
+      const formData = new FormData();
+      formData.append("uploadFile", headerImageBlob, args.headerImageName);
+
+      const requestOptions = {
+        method: "POST",
+        headers: headers,
+        body: formData,
+      };
+
+      const res = await fetch(
+        "https://api.interakt.ai/v1/public/track/files/upload_to_fb/?fileCategory=message_template_media",
+        requestOptions,
+      );
+      const { data } = (await res.json()) as MediaHandlerType;
+      console.log("DATA", data);
+      body = {
+        language: "English",
+        display_name: args.display_name,
+        category: args.category,
+        header_format: args.header_format,
+        header_handle: [data.file_handle],
+        header_handle_file_url: data.file_url,
+        header_handle_file_name: data.file_name,
+        body: args.body,
+        body_text: args.body_text,
+        footer: args.footer ? args.footer : null,
+      };
+    }
+
     if (!body) throw new ConvexError("Template body is required");
 
     const requestOptions = {
@@ -111,6 +179,7 @@ export const registerTemplate = action({
       requestOptions,
     );
     if (!response.ok) {
+      console.log("RESPONSE NOT OK");
       const res = await response.json();
       throw new ConvexError(res.message);
     }
@@ -122,6 +191,9 @@ export const registerTemplate = action({
       header_format: args.header_format,
       header: args.header,
       header_text: args.header_text,
+      header_handle: body.header_handle && body.header_handle[0],
+      header_handle_file_url:  body.header_handle_file_url,
+      header_handle_file_name: body.header_handle_file_name,
       body: args.body,
       body_text: args.body_text,
       footer: args.footer,

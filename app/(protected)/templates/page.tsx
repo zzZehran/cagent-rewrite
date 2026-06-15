@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Plus, RefreshCw } from "lucide-react";
+import { MessageSquare, Plus, RefreshCw, X } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -36,6 +36,8 @@ import { useRouter } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 import { toast } from "react-toastify";
 import { ConvexError } from "convex/values";
+import Dropzone from "react-dropzone";
+import Image from "next/image";
 
 const templateSchema = z.object({
   localName: z.string().min(1, "Local name is required."),
@@ -55,10 +57,12 @@ function WhatsappPreview({
   header,
   body,
   footer,
+  headerImage,
 }: {
   header?: string;
   body: string;
   footer?: string;
+  headerImage?: string;
 }) {
   return (
     <div className="flex justify-center p-5">
@@ -77,6 +81,13 @@ function WhatsappPreview({
         <div className="flex h-full flex-col gap-3 p-4">
           {/* Message */}
           <div className="max-w-[95%] h-auto rounded-lg rounded-tl-none bg-white p-3 shadow-sm">
+            {headerImage && (
+              <img
+                src={headerImage}
+                alt="Preview"
+                className="object-cover rounded-lg"
+              />
+            )}
             <p className="font-bold">{header}</p>
             <p className="text-sm flex whitespace-pre-wrap break-all">{body}</p>
 
@@ -101,7 +112,11 @@ function RegisterTemplate({
   showTemplateForm: boolean;
   setShowTemplateForm: (value: boolean) => void;
 }) {
+  const [headerImage, setHeaderImage] = useState<string | undefined>("");
+  const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
+
   const registerTemplate = useAction(api.templates.registerTemplate);
+  const generateUploadUrl = useMutation(api.templates.generateUploadUrl);
 
   const {
     register,
@@ -116,13 +131,35 @@ function RegisterTemplate({
   });
 
   const onSubmit: SubmitHandler<TemplateType> = async (data) => {
+    const postUrl = await generateUploadUrl();
+
+    if (data.header_format === "IMAGE" && !headerImageFile) {
+      toast.error("Please select an image");
+      return;
+    }
+
     try {
+      let storageId: string | undefined;
+      if (data.header_format === "IMAGE") {
+        const result = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": headerImageFile!.type },
+          body: headerImageFile,
+        });
+
+        const uploadData = await result.json();
+        storageId = uploadData.storageId;
+      }
+
       const res = await registerTemplate({
         ...data,
         businessId: businessId,
         body_text: data.body_text ? [data.body_text] : [],
         header_text: data.header_text ? [data.header_text] : [],
+        headerImageId: storageId,
+        headerImageName: headerImageFile?.name,
       });
+
       toast.success("Template created successfully.");
       setShowTemplateForm(false);
       reset();
@@ -233,7 +270,14 @@ function RegisterTemplate({
                   name="header_format"
                   control={control}
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        setHeaderImage("");
+                        setHeaderImageFile(null);
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                    >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Template Type" />
                       </SelectTrigger>
@@ -257,6 +301,54 @@ function RegisterTemplate({
                 )}
               </Field>
             </FieldGroup>
+
+            {watch("header_format") === "IMAGE" && (
+              <>
+                {headerImage ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={headerImage}
+                      alt="Preview"
+                      className="h-20 w-20 aspect-square object-cover rounded-lg"
+                    />
+
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={() => {
+                        setHeaderImage("");
+                        setHeaderImageFile(null);
+                      }}
+                      className="bg-red-500 px-1 absolute -top-2 -right-2 rounded-full"
+                    >
+                      <X size={12} />
+                    </Button>
+                  </div>
+                ) : (
+                  <Dropzone
+                    onDrop={(acceptedFiles) => {
+                      const file = acceptedFiles[0];
+                      if (file) {
+                        setHeaderImageFile(file);
+                        setHeaderImage(URL.createObjectURL(file));
+                      }
+                    }}
+                  >
+                    {({ getRootProps, getInputProps }) => (
+                      <section>
+                        <div {...getRootProps()}>
+                          <input {...getInputProps()} />
+                          <div className="border p-8 rounded-lg">
+                            Drag and drop some files here, or click to select
+                            files
+                          </div>
+                        </div>
+                      </section>
+                    )}
+                  </Dropzone>
+                )}
+              </>
+            )}
 
             {watch("header_format") === "TEXT" && (
               <>
@@ -356,6 +448,7 @@ function RegisterTemplate({
             header={watch("header")}
             body={watch("body")}
             footer={watch("footer")}
+            headerImage={headerImage}
           />
         </div>
       </DialogContent>
@@ -366,11 +459,15 @@ function RegisterTemplate({
 export default function page() {
   const { user, isSignedIn, isLoaded } = useUser();
   const router = useRouter();
+
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showPreviewTemplate, setShowPreviewTemplate] = useState(false);
-  const [previewHeader, setPreviewHeader] = useState<string | undefined>("");
+  const [previewHeader, setPreviewHeader] = useState<string | undefined>();
+  const [previewHeaderImage, setPreviewHeaderImage] = useState<
+    string | undefined
+  >();
   const [previewBody, setPreviewBody] = useState("");
-  const [previewFooter, setPreviewFooter] = useState<string | undefined>("");
+  const [previewFooter, setPreviewFooter] = useState<string | undefined>();
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -493,11 +590,15 @@ export default function page() {
             allTemplates.map((template) => {
               return (
                 <div
-                  onClick={() => {
+                  onClick={async () => {
                     setShowPreviewTemplate(true);
                     setPreviewHeader(template.header);
                     setPreviewBody(template.body);
                     setPreviewFooter(template.footer);
+                    if (template.header_handle_file_url) {
+                      const res = await fetch(template.header_handle_file_url);
+                      setPreviewHeaderImage(res.url);
+                    }
                   }}
                   key={template._id}
                   className="hover:cursor-pointer mt-8 col-span-1 relative h-full bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-emerald-100 hover:shadow-md transition-all flex flex-col gap-4"
@@ -589,6 +690,7 @@ export default function page() {
               header={previewHeader}
               body={previewBody}
               footer={previewFooter}
+              headerImage={previewHeaderImage}
             />
           </DialogContent>
         </Dialog>
