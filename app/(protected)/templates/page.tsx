@@ -154,8 +154,8 @@ function RegisterTemplate({
       const res = await registerTemplate({
         ...data,
         businessId: businessId,
-        body_text: data.body_text ? [data.body_text] : [],
-        header_text: data.header_text ? [data.header_text] : [],
+        body_text: data.body_text,
+        header_text: data.header_text,
         headerImageId: storageId,
         headerImageName: headerImageFile?.name,
       });

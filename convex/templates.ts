@@ -3,18 +3,18 @@ import { action, internalMutation, mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
-type templateBody = {
-  businessId: Id<"business">;
-  localName: string;
-  display_name: string;
-  category: "Utility" | "Marketing";
-  header_format?: "NONE" | "TEXT" | "IMAGE";
-  header?: string;
-  header_text?: string[];
-  body: string;
-  body_text: string[];
-  footer?: string;
-};
+// type templateBody = {
+//   businessId: Id<"business">;
+//   localName: string;
+//   display_name: string;
+//   category: "Utility" | "Marketing";
+//   header_format?: "NONE" | "TEXT" | "IMAGE";
+//   header?: string;
+//   header_text?: string[];
+//   body: string;
+//   body_text: string[];
+//   footer?: string;
+// };
 
 type MediaHandlerType = {
   result: boolean;
@@ -45,12 +45,12 @@ export const createTemplate = internalMutation({
       v.literal("IMAGE"),
     ),
     header: v.optional(v.string()),
-    header_text: v.array(v.string()),
+    header_text: v.optional(v.array(v.string())),
     header_handle: v.optional(v.string()),
     header_handle_file_url: v.optional(v.string()),
     header_handle_file_name: v.optional(v.string()),
     body: v.string(),
-    body_text: v.array(v.string()),
+    body_text: v.optional(v.array(v.string())),
     footer: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -88,9 +88,9 @@ export const registerTemplate = action({
       v.literal("IMAGE"),
     ),
     header: v.optional(v.string()),
-    header_text: v.array(v.string()),
+    header_text: v.optional(v.string()),
     body: v.string(),
-    body_text: v.array(v.string()),
+    body_text: v.optional(v.string()),
     footer: v.optional(v.string()),
     headerImageId: v.optional(v.string()),
     headerImageName: v.optional(v.string()),
@@ -101,7 +101,14 @@ export const registerTemplate = action({
     headers.append("Content-Type", "application/json");
 
     let body;
-
+    let bodyVariables;
+    let headerVariables;
+    if (args.header_format === "TEXT" && args.header_text) {
+      headerVariables = args.header_text.split(",");
+    }
+    if (args.body_text) {
+      bodyVariables = args.body_text.split(",");
+    }
     //No header
     if (!args.header_format || args.header_format === "NONE") {
       body = {
@@ -109,7 +116,7 @@ export const registerTemplate = action({
         display_name: args.display_name,
         category: args.category,
         body: args.body,
-        body_text: args.body_text,
+        body_text: bodyVariables,
         footer: args.footer ? args.footer : null,
       };
     }
@@ -121,9 +128,9 @@ export const registerTemplate = action({
         category: args.category,
         header_format: args.header_format,
         header: args.header,
-        header_text: args.header_text,
+        header_text: headerVariables,
         body: args.body,
-        body_text: args.body_text,
+        body_text: bodyVariables,
         footer: args.footer ? args.footer : null,
       };
     }
@@ -151,7 +158,6 @@ export const registerTemplate = action({
         requestOptions,
       );
       const { data } = (await res.json()) as MediaHandlerType;
-      console.log("DATA", data);
       body = {
         language: "English",
         display_name: args.display_name,
@@ -161,7 +167,7 @@ export const registerTemplate = action({
         header_handle_file_url: data.file_url,
         header_handle_file_name: data.file_name,
         body: args.body,
-        body_text: args.body_text,
+        body_text: bodyVariables,
         footer: args.footer ? args.footer : null,
       };
     }
@@ -190,12 +196,12 @@ export const registerTemplate = action({
       category: args.category,
       header_format: args.header_format,
       header: args.header,
-      header_text: args.header_text,
+      header_text: headerVariables,
       header_handle: body.header_handle && body.header_handle[0],
-      header_handle_file_url:  body.header_handle_file_url,
+      header_handle_file_url: body.header_handle_file_url,
       header_handle_file_name: body.header_handle_file_name,
       body: args.body,
-      body_text: args.body_text,
+      body_text: bodyVariables,
       footer: args.footer,
     });
     return "success";

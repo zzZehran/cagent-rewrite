@@ -57,10 +57,10 @@ export default defineSchema({
       v.literal("TEXT"),
       v.literal("IMAGE"),
     ),
-    header_text: v.array(v.string()),
+    header_text: v.optional(v.array(v.string())),
     header_handle: v.optional(v.string()),
     header_handle_file_url: v.optional(v.string()),
     header_handle_file_name: v.optional(v.string()),
-    footer: v.optional(v.string())
+    footer: v.optional(v.string()),
   }).index("by_businessId", ["businessId"]),
 });
