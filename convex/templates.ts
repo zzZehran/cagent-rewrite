@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
@@ -219,5 +219,21 @@ export const getTemplatesByBusinessId = query({
       .collect();
 
     return templates;
+  },
+});
+
+export const getTemplateById = internalQuery({
+  args: {
+    businessId: v.id("business"),
+    templateId: v.id("whatsappTemplates"),
+  },
+  handler: async (ctx, args) => {
+    const template = await ctx.db.get(args.templateId);
+
+    if (!template) throw new ConvexError("Template not found");
+    if (template.businessId !== args.businessId)
+      throw new ConvexError("Template not found");
+
+    return template;
   },
 });

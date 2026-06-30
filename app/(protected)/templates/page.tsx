@@ -187,7 +187,7 @@ function RegisterTemplate({
           "
         >
           <Plus size={16} />
-          Open Dialog
+          Add Template
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -510,7 +510,6 @@ export default function page() {
         className="
           z-10
           bg-white/80
-          border-b border-gray-100
           backdrop-blur-md sticky top-0
         "
       >
@@ -558,6 +557,7 @@ export default function page() {
             "
           >
             <Button
+              onClick={() => alert("To be implemented")}
               className="
                 flex
                 px-4
@@ -677,6 +677,12 @@ export default function page() {
                 </div>
               );
             })}
+
+          {allTemplates && allTemplates.length === 0 && (
+            <div className="col-span-3 flex justify-center items-center py-16">
+              <p className="text-gray-500 text-sm">No templates found.</p>
+            </div>
+          )}
         </div>
 
         {/* Template Quickview */}

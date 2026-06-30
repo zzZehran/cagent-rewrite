@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as broadcast from "../broadcast.js";
 import type * as business from "../business.js";
 import type * as customers from "../customers.js";
 import type * as groups from "../groups.js";
@@ -20,6 +21,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  broadcast: typeof broadcast;
   business: typeof business;
   customers: typeof customers;
   groups: typeof groups;
