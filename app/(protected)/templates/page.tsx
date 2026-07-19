@@ -468,6 +468,7 @@ export default function page() {
   >();
   const [previewBody, setPreviewBody] = useState("");
   const [previewFooter, setPreviewFooter] = useState<string | undefined>();
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -478,6 +479,9 @@ export default function page() {
     api.templates.getTemplatesByBusinessId,
     business ? { businessId: business._id } : "skip",
   );
+
+  const refreshTemplates = useAction(api.templates.refreshTemplate);
+
 
   useEffect(() => {
     if (business === null) router.push("/onboarding");
@@ -494,6 +498,23 @@ export default function page() {
       </div>
     );
   }
+
+  async function refreshtAllTemplates(businessId: Id<"business">) {
+    setIsRefreshingAll(true)
+    try {
+      await refreshTemplates({ businessId })
+      toast.success("Refreshed templates successfully")
+    } catch (error) {
+      const message = error instanceof ConvexError
+        ? (error.data as string)
+        : "Failed to refresh templates"
+      toast.error(message)
+    } finally {
+      setIsRefreshingAll(false)
+    }
+  }
+
+
   if (business === null) return null;
 
   return (
@@ -557,7 +578,8 @@ export default function page() {
             "
           >
             <Button
-              onClick={() => alert("To be implemented")}
+              disabled={isRefreshingAll}
+              onClick={() => refreshtAllTemplates(business._id)}
               className="
                 flex
                 px-4
@@ -570,7 +592,7 @@ export default function page() {
             >
               <RefreshCw
                 size={16}
-                // className={isRefreshingAll ? "animate-spin" : ""}
+                className={isRefreshingAll ? "animate-spin" : ""}
               />
               Refresh All
             </Button>
@@ -607,13 +629,12 @@ export default function page() {
                   {template.status && (
                     <div className="absolute top-4 right-4 z-10">
                       <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          template.status === "Approved"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : template.status === "Rejected"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-amber-100 text-amber-700"
-                        }`}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${template.status === "Approved"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : template.status === "Rejected"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700"
+                          }`}
                       >
                         {template.status}
                       </span>

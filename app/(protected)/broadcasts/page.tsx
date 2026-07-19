@@ -10,6 +10,7 @@ import {
   Globe,
   LucideIcon,
   Megaphone,
+  Search,
   Send,
   Tags,
   UserCheck,
@@ -50,7 +51,7 @@ export default function page() {
   const { userId, isSignedIn, isLoaded } = useAuth();
   const router = useRouter();
 
-  const [mode, setMode] = useState<Mode>("Group");
+  const [mode, setMode] = useState<Mode>("Individuals");
   const [broadCastGroups, setBroadcastGroups] = useState<Id<"groups">[]>([]);
   const [selectedTemplate, setSelectedTemplate] =
     useState<Id<"whatsappTemplates">>();
@@ -65,6 +66,11 @@ export default function page() {
       }
     >
   >({});
+
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+
+
 
   const business = useQuery(
     api.business.getBusinessByOwnerId,
@@ -81,7 +87,23 @@ export default function page() {
     business ? { businessId: business._id } : "skip",
   );
 
+  const searchedCustomers = useQuery(
+    api.customers.getSearchedCustomers,
+    debouncedSearch && business
+      ? { customerName: debouncedSearch, businessId: business._id }
+      : "skip",
+  );
+
   const sendBroadcast = useAction(api.broadcast.sendBroadcast);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [search]);
 
   useEffect(() => {
     if (business === null) router.push("/onboarding");
@@ -122,10 +144,7 @@ export default function page() {
   );
 
   async function handleBroadcast() {
-    console.log("Broadcast groups: ", broadCastGroups);
-    console.log("Selected template: ", selectedTemplate);
-    console.log("Values", selectedValue);
-
+    console.log("Values: ", selectedValue)
     try {
       if (!business) return;
       if (selectedTemplate === undefined) return;
@@ -133,16 +152,19 @@ export default function page() {
         businessId: business._id,
         broadcastGroupIds: broadCastGroups,
         templateId: selectedTemplate,
+        variables: selectedValue
       });
     } catch (error) {
-      if(error instanceof ConvexError){
+      if (error instanceof ConvexError) {
         toast.error(`Error: ${error.data}`)
-      }else{
+      } else {
         toast.error("Something went wrong")
       }
 
     }
   }
+
+
 
   return (
     <div
@@ -265,6 +287,26 @@ export default function page() {
               "
             />
           </>
+        )}
+
+        {/* Individuals */}
+        {mode === "Individuals" && (
+          <div className="mt-3 ">
+            <div className="relative mb-6">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <Input
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, email or phone…"
+                className="w-full pl-10 pr-4 py-6 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-800 placeholder-gray-400 text-sm shadow-sm"
+              />
+            </div>
+            <div>
+
+            </div>
+          </div>
         )}
 
         {/* Select Templates */}

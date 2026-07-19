@@ -23,7 +23,7 @@ export const sendBroadcast = action({
     businessId: v.id("business"),
     broadcastGroupIds: v.array(v.id("groups")),
     templateId: v.id("whatsappTemplates"),
-    varaibles: v.optional(v.object({})),
+    variables: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     let customers = [];
@@ -37,7 +37,14 @@ export const sendBroadcast = action({
       customers.push(...fetchedCustomers);
     }
 
-    //found this online on how to remove unique object from an array of objects
+    /*
+     * Customers and groups is a many to many relation. A customer can be in many groups.
+     * So if we have two groups, the customer can be in both, we don't want to send the
+     * broadcast to him twice thus below we get uniqueCustomerArray.
+     *
+     * found this online on how to remove unique object from an array of objects
+     */
+
     const uniqueCustomerArray = customers.filter(
       (o, index, arr) =>
         arr.findIndex((item) => JSON.stringify(item) === JSON.stringify(o)) ===
@@ -49,13 +56,32 @@ export const sendBroadcast = action({
       templateId: args.templateId,
     });
 
+    const variables = (args.variables ?? {}) as Record<
+      string,
+      { source: string; value: string }
+    >;
+
+    // REVIEW: Get this part reviewed for the order of array.
+    const fullBodyVariables = Object.values(variables);
+
     const headers = new Headers();
     headers.append("Authorization", `Basic ${process.env.INTERAKT_API_KEY!}`);
     headers.append("Content-Type", "application/json");
 
-    // working on sending broadcast
     for (const customer of uniqueCustomerArray) {
-      const body = {
+      const bodyValues = fullBodyVariables
+        .map((el) => {
+          if (el.source === "customer_name") {
+            return customer?.name ?? "";
+          }
+          if (el.source === "customer_phone") {
+            return customer?.phone ?? "";
+          }
+          return el.value;
+        })
+        .reverse();
+
+      let body = {
         countryCode: "+91",
         phoneNumber: customer?.phone,
         template_category: template.category,
@@ -64,9 +90,34 @@ export const sendBroadcast = action({
         template: {
           name: template.display_name,
           languageCode: "en",
-          bodyValues: ["body_variable_value_1", "body_variable_value_n"],
+          bodyValues: bodyValues,
         },
       };
+
+      if (template.header_format === "NONE") {
+        body = {
+          ...body,
+        }
+      }
+      if(template.header_format === "TEXT"){
+        body = {
+          ...body,
+          
+        }
+      }
+
+     
+
+      const response = await fetch(
+        "https://api.interakt.ai/v1/public/message/",
+        {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(body),
+        },
+      );
+      const data = await response.json();
+      console.log(data);
     }
   },
 });

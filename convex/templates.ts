@@ -1,20 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-
-// type templateBody = {
-//   businessId: Id<"business">;
-//   localName: string;
-//   display_name: string;
-//   category: "Utility" | "Marketing";
-//   header_format?: "NONE" | "TEXT" | "IMAGE";
-//   header?: string;
-//   header_text?: string[];
-//   body: string;
-//   body_text: string[];
-//   footer?: string;
-// };
 
 type MediaHandlerType = {
   result: boolean;
@@ -237,3 +223,63 @@ export const getTemplateById = internalQuery({
     return template;
   },
 });
+
+
+export const refreshTemplate = action({
+  args: {
+    businessId: v.id("business")
+  },
+  handler: async (ctx, args) => {
+
+    const myHeaders = new Headers();
+    myHeaders.append("Authorization", `Basic ${process.env.INTERAKT_API_KEY!}`);
+    myHeaders.append("Content-Type", "application/json");
+
+    const requestOptions = {
+      method: "GET",
+      headers: myHeaders,
+    }
+
+    try {
+      const res = await fetch("https://api.interakt.ai/v1/public/track/organization/templates?autosubmitted_for=all&approval_status=APPROVED&language=all", requestOptions)
+      if (!res.ok) {
+        throw new ConvexError("Failed to fetch templates");
+      }
+      const data = await res.json();
+      const internalRes = await ctx.runMutation(internal.templates.updateTemplateStatus,
+        { businessId: args.businessId, templates: data.results.templates })
+      if (internalRes === "success") return "success"
+
+    } catch (error) {
+      console.log("Catch: ", error)
+      throw new ConvexError("Failed to fetch templates.");
+    }
+
+  }
+})
+
+/* This internal mutation updates the status of the template based on if the fetch call returns 
+ * the template. This is because interakt doesn't return explicit status rather it omits
+*  un-verified templates and only returns verified templates. 
+*/
+
+// REVEIW: How to make templates type safe here. Or API calls in genearl?
+export const updateTemplateStatus = internalMutation({
+  args: {
+    businessId: v.id("business"),
+    templates: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const allTemplates = await ctx.db.query("whatsappTemplates").withIndex("by_businessId", (q) => q.eq("businessId", args.businessId)).collect();
+
+    for (const template of args.templates) {
+      for (const dbTemplates of allTemplates) {
+        if (dbTemplates.display_name === template.display_name) {
+          await ctx.db.patch(dbTemplates._id, { status: "Approved" })
+        }
+      }
+    }
+
+    return "success";
+  }
+})
